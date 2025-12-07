@@ -148,36 +148,48 @@ static void double_threshold(const std::vector<float>& thin,
 static void hysteresis(std::vector<uint8_t>& edges,
                        int W, int H)
 {
-    std::deque<int> dq;
-    auto idx = [W](int y,int x){ return y*W + x; };
+    std::vector<std::deque<int>> local_queues(omp_get_max_threads());
+    auto idx = [W](int y, int x) { return y * W + x; };
 
-    for(int y=0;y<H;++y){
-        for(int x=0;x<W;++x){
-            if(edges[idx(y,x)]==2){
-                dq.push_back(idx(y,x));
+#pragma omp parallel
+    {
+        int tid = omp_get_thread_num();
+        for (int y = tid; y < H; y += omp_get_num_threads()) {
+            for (int x = 0; x < W; ++x) {
+                if (edges[idx(y, x)] == 2) {
+                    local_queues[tid].push_back(idx(y, x));
+                }
+            }
+        }
+    }
+    const int dx[8] = { -1, 0, 1, -1, 1, -1, 0, 1 };
+    const int dy[8] = { -1, -1, -1, 0, 0, 1, 1, 1 };
+
+#pragma omp parallel
+    {
+        int tid = omp_get_thread_num();
+        while (!local_queues[tid].empty()) {
+            int p = local_queues[tid].front();
+            local_queues[tid].pop_front();
+            int y = p / W, x = p % W;
+
+            for (int k = 0; k < 8; ++k) {
+                int nx = x + dx[k], ny = y + dy[k];
+                if (nx >= 0 && ny >= 0 && nx < W && ny < H) {
+                    int q = idx(ny, nx);
+                    if (edges[q] == 1) {
+                        edges[q] = 2;
+                        local_queues[tid].push_back(q);
+                    }
+                }
             }
         }
     }
 
-    const int dx[8]={-1,0,1,-1,1,-1,0,1};
-    const int dy[8]={-1,-1,-1,0,0,1,1,1};
-
-    while(!dq.empty()){
-        int p=dq.front(); dq.pop_front();
-        int y=p/W, x=p%W;
-        for(int k=0;k<8;++k){
-            int nx=x+dx[k], ny=y+dy[k];
-            if(nx<0||ny<0||nx>=W||ny>=H) continue;
-            int q = idx(ny,nx);
-            if(edges[q]==1){
-                edges[q]=2;
-                dq.push_back(q);
-            }
-        }
+#pragma omp parallel for
+    for (int i = 0; i < W * H; ++i) {
+        edges[i] = (edges[i] == 2) ? 255 : 0;
     }
-#pragma omp parallel for schedule(static)
-    for(int i=0;i<W*H;++i)
-        edges[i] = (edges[i]==2)?255:0;
 }
 
 // 최종 파이프라인: main.cpp 에서는 이 함수만 호출하게 됨
