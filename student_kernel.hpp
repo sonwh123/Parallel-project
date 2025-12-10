@@ -217,7 +217,7 @@ static void sobel(const std::vector<float>& in,
     }
 
     // 일반적인 경우 (W >= 3, H >= 3)
-    #pragma omp parallel for schedule(dynamic, 100)
+    #pragma omp parallel for schedule(dynamic)
     for (int y = 0; y < H; ++y) {
         float* gx_row = &gx[(size_t)y * W];
         float* gy_row = &gy[(size_t)y * W];
