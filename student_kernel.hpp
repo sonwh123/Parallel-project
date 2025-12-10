@@ -27,7 +27,7 @@ static void gaussian5x1(const std::vector<uint8_t>& in,
     if ((int)in.size() < W * H || (int)tmp.size() < W * H) return;
 
     // y 방향으로 병렬화 (각 쓰레드가 한 줄씩 담당)
-    #pragma omp parallel for schedule(static)
+    #pragma omp parallel for schedule(dynamic)
     for (int y = 0; y < H; ++y) {
         const uint8_t* in_row = &in[(size_t)y * W];
         float*         tmp_row = &tmp[(size_t)y * W];
@@ -109,7 +109,7 @@ static void gaussian1x5_from_tmp(const std::vector<float>& tmp,
     const float k4 = k[4];
 
     // y 방향 병렬화 (각 쓰레드가 한 줄씩 담당)
-    #pragma omp parallel for schedule(static)
+    #pragma omp parallel for schedule(dynamic)
     for (int y = 0; y < H; ++y) {
         float* out_row = &out[(size_t)y * W];
 
@@ -195,7 +195,7 @@ static void sobel(const std::vector<float>& in,
 
     // 너무 작은 이미지(3x3 미만)는 그냥 전체 clamp 버전으로 처리
     if (W < 3 || H < 3) {
-        #pragma omp parallel for schedule(static)
+        #pragma omp parallel for schedule(dynamic)
         for (int y = 0; y < H; ++y) {
             for (int x = 0; x < W; ++x) {
                 float sx = 0.0f, sy = 0.0f;
@@ -217,7 +217,7 @@ static void sobel(const std::vector<float>& in,
     }
 
     // 일반적인 경우 (W >= 3, H >= 3)
-    #pragma omp parallel for schedule(static)
+    #pragma omp parallel for schedule(dynamic, 100)
     for (int y = 0; y < H; ++y) {
         float* gx_row = &gx[(size_t)y * W];
         float* gy_row = &gy[(size_t)y * W];
@@ -330,9 +330,6 @@ static void grad_mag_dir(const std::vector<float>& gx,
                          int W, int H)
 {
     const std::size_t N = (std::size_t)W * H;
-    if (N == 0) return;
-    if (gx.size() < N || gy.size() < N || mag.size() < N || dir.size() < N) return;
-
     // tan(22.5°), tan(67.5°)
     static const float TAN22_5 = 0.41421356237f;  // tan(pi/8)
     static const float TAN67_5 = 2.41421356237f;  // tan(3*pi/8)
@@ -380,9 +377,7 @@ static void nonmax_supp(const std::vector<float>& mag,
                         std::vector<float>& thin,
                         int W, int H)
 {
-    if (W <= 0 || H <= 0) return;
     const std::size_t N = (std::size_t)W * H;
-    if (mag.size() < N || dir.size() < N || thin.size() < N) return;
 
     // 아주 작은 이미지(3x3 미만)는 그냥 원래 방식(clamp 전체)으로 처리
     if (W < 3 || H < 3) {
