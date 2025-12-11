@@ -22,12 +22,8 @@ static void gaussian5x1(const std::vector<uint8_t>& in,
     static const float k[5] = { 1.f, 4.f, 6.f, 4.f, 1.f };
     const float norm = 1.0f / 16.0f;
 
-    // 세이프 가드: 크기 체크 (선택 사항이지만 있으면 좋음)
-    if (W <= 0 || H <= 0) return;
-    if ((int)in.size() < W * H || (int)tmp.size() < W * H) return;
-
     // y 방향으로 병렬화 (각 쓰레드가 한 줄씩 담당)
-    #pragma omp parallel for schedule(dynamic)
+    #pragma omp parallel for schedule(dynamic, 8)
     for (int y = 0; y < H; ++y) {
         const uint8_t* in_row = &in[(size_t)y * W];
         float*         tmp_row = &tmp[(size_t)y * W];
@@ -109,7 +105,7 @@ static void gaussian1x5_from_tmp(const std::vector<float>& tmp,
     const float k4 = k[4];
 
     // y 방향 병렬화 (각 쓰레드가 한 줄씩 담당)
-    #pragma omp parallel for schedule(dynamic)
+    #pragma omp parallel for schedule(dynamic, 8)
     for (int y = 0; y < H; ++y) {
         float* out_row = &out[(size_t)y * W];
 
@@ -188,14 +184,9 @@ static void sobel(const std::vector<float>& in,
         {  1,  2,  1 }
     };
 
-    if (W <= 0 || H <= 0) return;
-    if ((int)in.size() < W * H)  return;
-    if ((int)gx.size() < W * H)  return;
-    if ((int)gy.size() < W * H)  return;
-
     // 너무 작은 이미지(3x3 미만)는 그냥 전체 clamp 버전으로 처리
     if (W < 3 || H < 3) {
-        #pragma omp parallel for schedule(dynamic)
+        #pragma omp parallel for schedule(dynamic,8)
         for (int y = 0; y < H; ++y) {
             for (int x = 0; x < W; ++x) {
                 float sx = 0.0f, sy = 0.0f;
@@ -217,7 +208,7 @@ static void sobel(const std::vector<float>& in,
     }
 
     // 일반적인 경우 (W >= 3, H >= 3)
-    #pragma omp parallel for schedule(dynamic)
+    #pragma omp parallel for schedule(dynamic,8)
     for (int y = 0; y < H; ++y) {
         float* gx_row = &gx[(size_t)y * W];
         float* gy_row = &gy[(size_t)y * W];
