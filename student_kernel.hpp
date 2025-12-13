@@ -8,13 +8,13 @@
 #include <omp.h>
 
 template<typename T>
-static inline T clampv_student(T x, T lo, T hi) {
+static inline T clampv_student(T x, T lo, T hi){
     return x < lo ? lo : (x > hi ? hi : x);
 }
 
 namespace student {
 
-    // 5x5 separable Gaussian kernel (sigma ~1.0)
+// 5x5 separable Gaussian kernel (sigma ~1.0)
 static void gaussian5x1(const std::vector<uint8_t>& in,
                         std::vector<float>& tmp,
                         int W, int H)
@@ -41,10 +41,7 @@ static void gaussian5x1(const std::vector<uint8_t>& in,
             continue;
         }
 
-        // -----------------------
         // 1) 왼쪽 경계: x = 0, 1
-        //    → clamp 사용
-        // -----------------------
         for (int x = 0; x < 2; ++x) {
             float s = 0.0f;
             for (int dx = -2; dx <= 2; ++dx) {
@@ -54,10 +51,7 @@ static void gaussian5x1(const std::vector<uint8_t>& in,
             tmp_row[x] = s * norm;
         }
 
-        // -----------------------
         // 2) 가운데 구간: x = 2 ~ W-3
-        //    → clamp 전혀 없음 + 5탭 완전 언롤
-        // -----------------------
         for (int x = 2; x <= W - 3; ++x) {
             float v0 = static_cast<float>(in_row[x - 2]);
             float v1 = static_cast<float>(in_row[x - 1]);
@@ -74,10 +68,7 @@ static void gaussian5x1(const std::vector<uint8_t>& in,
             tmp_row[x] = s * norm;
         }
 
-        // -----------------------
         // 3) 오른쪽 경계: x = W-2, W-1
-        //    → clamp 사용
-        // -----------------------
         for (int x = W - 2; x < W; ++x) {
             float s = 0.0f;
             for (int dx = -2; dx <= 2; ++dx) {
@@ -88,7 +79,6 @@ static void gaussian5x1(const std::vector<uint8_t>& in,
         }
     }
 }
-
 
 // vertical
 static void gaussian1x5_from_tmp(const std::vector<float>& tmp,
@@ -122,10 +112,7 @@ static void gaussian1x5_from_tmp(const std::vector<float>& tmp,
             continue;
         }
 
-        // ---------------------------
         // 1) 위/아래 경계: y = 0, 1, H-2, H-1
-        //    -> clamp 사용
-        // ---------------------------
         if (y < 2 || y > H - 3) {
             for (int x = 0; x < W; ++x) {
                 float s = 0.0f;
@@ -136,10 +123,8 @@ static void gaussian1x5_from_tmp(const std::vector<float>& tmp,
                 out_row[x] = s * norm;
             }
         }
-        // ---------------------------
+
         // 2) 가운데 구간: y = 2 ~ H-3
-        //    -> clamp 없음 + 5줄 완전 언롤
-        // ---------------------------
         else {
             const float* row_m2 = &tmp[(size_t)(y - 2) * W];
             const float* row_m1 = &tmp[(size_t)(y - 1) * W];
@@ -165,7 +150,6 @@ static void gaussian1x5_from_tmp(const std::vector<float>& tmp,
         }
     }
 }
-
 
 static void sobel(const std::vector<float>& in,
                   std::vector<float>& gx,
@@ -312,8 +296,6 @@ static void sobel(const std::vector<float>& in,
     }
 }
 
-
-
 static void grad_mag_dir(const std::vector<float>& gx,
                          const std::vector<float>& gy,
                          std::vector<float>& mag,
@@ -361,7 +343,6 @@ static void grad_mag_dir(const std::vector<float>& gx,
         dir[i] = q;
     }
 }
-
 
 static void nonmax_supp(const std::vector<float>& mag,
                         const std::vector<uint8_t>& dir,
@@ -523,7 +504,6 @@ static void nonmax_supp(const std::vector<float>& mag,
     }
 }
 
-
 static void double_threshold(const std::vector<float>& thin,
                              std::vector<uint8_t>& edges,
                              float lowT, float highT,
@@ -538,7 +518,6 @@ static void double_threshold(const std::vector<float>& thin,
         // strong: v >= highT → 2
         // weak  : lowT <= v < highT → 1
         // else  : 0
-        //
         // bool → 0/1로 캐스팅되는 성질을 이용
         uint8_t is_strong = (v >= highT);  // 0 or 1
         uint8_t is_weak   = (v >= lowT);   // 0 or 1
@@ -549,7 +528,6 @@ static void double_threshold(const std::vector<float>& thin,
         edges[(std::size_t)i] = label;
     }
 }
-
 
 static void hysteresis(std::vector<uint8_t>& edges,
                        int W, int H)
@@ -613,30 +591,19 @@ static void hysteresis(std::vector<uint8_t>& edges,
     }
 }
 
-
 // 최종 파이프라인: main.cpp 에서는 이 함수만 호출하게 됨
 static void canny(const std::vector<uint8_t>& in,
                   std::vector<uint8_t>& out,
                   int W, int H)
 {
-    const int N = W * H;
-    std::vector<float> tmp(N), blur(N), gx(N), gy(N), mag(N), thin(N);
-    std::vector<uint8_t> dir(N), edges(N);
+    std::vector<float> tmp(W*H), blur(W*H), gx(W*H), gy(W*H), mag(W*H), thin(W*H);
+    std::vector<uint8_t> dir(W*H), edges(W*H);
 
-    double t1 = omp_get_wtime();
     gaussian5x1(in, tmp, W, H);
-    double t2 = omp_get_wtime();
     gaussian1x5_from_tmp(tmp, blur, W, H);
-
-    //gaussian5x5(in, blur, W, H);
-
-    double t3 = omp_get_wtime();
     sobel(blur, gx, gy, W, H);
-    double t4 = omp_get_wtime();
     grad_mag_dir(gx, gy, mag, dir, W, H);
-    double t5 = omp_get_wtime();
     nonmax_supp(mag, dir, thin, W, H);
-    double t6 = omp_get_wtime();
 
     // 간단 자동 임계값 (reference 와 동일)
     double sum=0, sum2=0;
@@ -646,27 +613,14 @@ static void canny(const std::vector<uint8_t>& in,
         sum += v;
         sum2 += v * v;
     }
-    double t7 = omp_get_wtime();
-    double mean = sum / N;
-    double var  = sum2 / N - mean*mean;
+    double mean = sum / (W*H);
+    double var  = sum2 / (W*H) - mean*mean;
     double stdv = std::sqrt(std::max(0.0, var));
     float highT = float(mean + stdv);
     float lowT  = highT * 0.4f;
-    double t8 = omp_get_wtime();
-    double_threshold(thin, edges, lowT, highT, W, H);
-    double t9 = omp_get_wtime();
-    hysteresis(edges, W, H);
-    double t10 = omp_get_wtime();
 
-    std::cout << "gaussian5x1 time:      " << (t2 - t1) * 1000 << "ms\n";
-    std::cout << "gaussian1x5 time:      " << (t3 - t2) * 1000 << "ms\n";
-    //std::cout << "gaussian5x5 time:      " << (t3 - t1) * 1000 << "ms\n";
-    std::cout << "sobel time:            " << (t4 - t3) * 1000 << "ms\n";
-    std::cout << "grad_mag_dir time:     " << (t5 - t4) * 1000 << "ms\n";
-    std::cout << "nonmax_supp time:      " << (t6 - t5) * 1000 << "ms\n";
-    std::cout << "sum, sum2 time:        " << (t7 - t6) * 1000 << "ms\n";
-    std::cout << "double threshold time: " << (t9 - t8) * 1000 << "ms\n";
-    std::cout << "hysteresis time:       " << (t10 - t9) * 1000 << "ms\n";
+    double_threshold(thin, edges, lowT, highT, W, H);
+    hysteresis(edges, W, H);
 
     out = std::move(edges);
 }
